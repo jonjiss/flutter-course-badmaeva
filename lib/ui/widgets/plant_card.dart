@@ -1,6 +1,10 @@
-import 'package:flutter/material.dart';
 
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+
+import '../../bloc/plants_bloc.dart';
 import '../../domain/entities/plant.dart';
+import '../screens/plant_details_screen.dart';
 
 class PlantCard extends StatelessWidget {
   final Plant plant;
@@ -14,6 +18,19 @@ class PlantCard extends StatelessWidget {
     required this.onLikeTap,
   });
 
+  String _categoryName(PlantCategory category) {
+    switch (category) {
+      case PlantCategory.foliage:
+        return 'Декоративно-лиственные';
+      case PlantCategory.flowering:
+        return 'Цветущие';
+      case PlantCategory.succulent:
+        return 'Суккуленты';
+      case PlantCategory.tropical:
+        return 'Тропические';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Card(
@@ -21,85 +38,77 @@ class PlantCard extends StatelessWidget {
         horizontal: 16,
         vertical: 8,
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            Stack(
-              children: [
-                Container(
-                  width: 90,
-                  height: 90,
-                  decoration: BoxDecoration(
-                    color: plant.color,
-                    borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (detailsContext) {
+                return BlocProvider.value(
+                  value: context.read<PlantsBloc>(),
+                  child: PlantDetailsScreen(
+                    plant: plant,
                   ),
-                  alignment: Alignment.center,
+                );
+              },
+            ),
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Container(
+                width: 75,
+                height: 75,
+                decoration: BoxDecoration(
+                  color: plant.color.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Center(
                   child: Text(
                     plant.icon,
-                    style: const TextStyle(fontSize: 42),
+                    style: const TextStyle(fontSize: 38),
                   ),
                 ),
-                Positioned(
-                  top: 4,
-                  right: 4,
-                  child: IconButton(
-                    onPressed: onLikeTap,
-                    icon: Icon(
-                      isLiked
-                          ? Icons.favorite
-                          : Icons.favorite_border,
-                      color: isLiked ? Colors.red : Colors.grey,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    plant.name,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(plant.subtitle),
-                  if (plant.description != null) ...[
-                    const SizedBox(height: 4),
-                    Text(plant.description!),
-                  ],
-                  const SizedBox(height: 8),
-                  Text(
-                    _categoryName(plant.category),
-                    style: const TextStyle(
-                      color: Colors.green,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
               ),
-            ),
-          ],
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      plant.name,
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(plant.subtitle),
+                    const SizedBox(height: 6),
+                    Text(
+                      _categoryName(plant.category),
+                      style: TextStyle(
+                        color: Colors.green.shade700,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                onPressed: onLikeTap,
+                icon: Icon(
+                  isLiked ? Icons.favorite : Icons.favorite_border,
+                  color: isLiked ? Colors.red : null,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
-  }
-
-  String _categoryName(PlantCategory category) {
-    switch (category) {
-      case PlantCategory.tropical:
-        return 'Тропическое';
-      case PlantCategory.succulent:
-        return 'Суккулент';
-      case PlantCategory.flowering:
-        return 'Цветущее';
-      case PlantCategory.foliage:
-        return 'Декоративно-лиственное';
-    }
   }
 }
