@@ -1,8 +1,7 @@
 
-import 'dart:convert';
-
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 
 import '../../domain/entities/plant.dart';
 import '../widgets/plant_card.dart';
@@ -15,24 +14,15 @@ class CatalogScreen extends StatefulWidget {
 }
 
 class _CatalogScreenState extends State<CatalogScreen> {
-  static const String _baseUrl =
-      'https://6ae5e29b877d34ccafc28161.mockapi.io';
-
-  final Set<int> _likedIds = {};
+  final Set<String> _likedIds = {};
   final TextEditingController _nameController =
       TextEditingController();
 
-  List<Plant> _plants = [];
-  bool _onlyLiked = false;
-  bool _isLoading = true;
-  bool _isAdding = false;
-  String? _error;
+  final CollectionReference<Map<String, dynamic>> _plantsCollection =
+      FirebaseFirestore.instance.collection('plants');
 
-  @override
-  void initState() {
-    super.initState();
-    _loadPlants();
-  }
+  bool _onlyLiked = false;
+  bool _isAdding = false;
 
   @override
   void dispose() {
@@ -40,50 +30,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
     super.dispose();
   }
 
-  // Загрузка растений с сервера (GET)
-  Future<void> _loadPlants() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
-
-    try {
-      final response = await http.get(
-        Uri.parse('$_baseUrl/plants'),
-      );
-
-      if (response.statusCode != 200) {
-        throw Exception('Ошибка сервера: ${response.statusCode}');
-      }
-
-      final List<dynamic> data = jsonDecode(response.body);
-
-      final plants = data
-          .map(
-            (item) => Plant.fromJson(
-              item as Map<String, dynamic>,
-            ),
-          )
-          .toList();
-
-      if (!mounted) return;
-
-      setState(() {
-        _plants = plants;
-        _isLoading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-
-      setState(() {
-        _error =
-            'Не удалось загрузить растения. Проверьте интернет.';
-        _isLoading = false;
-      });
-    }
-  }
-
-  // Добавление нового растения на сервер (POST)
+  // Добавление нового растения в Firestore.
   Future<void> _addPlant() async {
     final name = _nameController.text.trim();
 
@@ -102,7 +49,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
 
     try {
       final newPlant = Plant(
-        id: 0,
+        id: '',
         name: name,
         subtitle: 'Новое растение',
         category: PlantCategory.foliage,
@@ -111,33 +58,16 @@ class _CatalogScreenState extends State<CatalogScreen> {
         color: Colors.green,
       );
 
-      final response = await http.post(
-        Uri.parse('$_baseUrl/plants'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode(newPlant.toJson()),
-      );
-
-      if (response.statusCode != 201) {
-        throw Exception(
-          'Ошибка добавления: ${response.statusCode}',
-        );
-      }
-
-      final addedPlant = Plant.fromJson(
-        jsonDecode(response.body),
-      );
+      await _plantsCollection.add(newPlant.toJson());
 
       if (!mounted) return;
 
+      _nameController.clear();
+
       setState(() {
-        _plants.insert(0, addedPlant);
         _onlyLiked = false;
         _isAdding = false;
       });
-
-      _nameController.clear();
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -152,8 +82,8 @@ class _CatalogScreenState extends State<CatalogScreen> {
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Не удалось добавить растение'),
+        SnackBar(
+          content: Text('Не удалось добавить растение: $e'),
         ),
       );
     }
@@ -161,12 +91,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final visiblePlants = _onlyLiked
-        ? _plants
-            .where((plant) => _likedIds.contains(plant.id))
-            .toList()
-        : _plants;
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Каталог растений'),
@@ -191,91 +115,111 @@ class _CatalogScreenState extends State<CatalogScreen> {
               color: _onlyLiked ? Colors.red : null,
             ),
           ),
+          IconButton(
+            tooltip: 'Выйти',
+            icon: const Icon(Icons.logout),
+            onPressed: () async {
+              await FirebaseAuth.instance.signOut();
+            },
+          ),
         ],
       ),
-      body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(),
-            )
-          : _error != null
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(_error!),
-                      const SizedBox(height: 12),
-                      ElevatedButton(
-                        onPressed: _loadPlants,
-                        child: const Text('Повторить'),
-                      ),
-                    ],
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _nameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Название растения',
+                      border: OutlineInputBorder(),
+                    ),
                   ),
-                )
-              : Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _nameController,
-                              decoration: const InputDecoration(
-                                labelText: 'Название растения',
-                                border: OutlineInputBorder(),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          ElevatedButton(
-                            onPressed:
-                                _isAdding ? null : _addPlant,
-                            child: _isAdding
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Text('Добавить'),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      child: visiblePlants.isEmpty
-                          ? const Center(
-                              child: Text(
-                                'Ничего не нашлось',
-                                style: TextStyle(fontSize: 18),
-                              ),
-                            )
-                          : ListView.builder(
-                              itemCount: visiblePlants.length,
-                              itemBuilder: (context, index) {
-                                final plant = visiblePlants[index];
-
-                                return PlantCard(
-                                  plant: plant,
-                                  isLiked:
-                                      _likedIds.contains(plant.id),
-                                  onLikeTap: () {
-                                    setState(() {
-                                      if (_likedIds
-                                          .contains(plant.id)) {
-                                        _likedIds.remove(plant.id);
-                                      } else {
-                                        _likedIds.add(plant.id);
-                                      }
-                                    });
-                                  },
-                                );
-                              },
-                            ),
-                    ),
-                  ],
                 ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: _isAdding ? null : _addPlant,
+                  child: _isAdding
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Text('Добавить'),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: _plantsCollection.snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState ==
+                    ConnectionState.waiting) {
+                  return const Center(
+                    child: CircularProgressIndicator(),
+                  );
+                }
+
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Text(
+                      'Ошибка загрузки растений: ${snapshot.error}',
+                    ),
+                  );
+                }
+
+                final plants = snapshot.data!.docs
+                    .map((doc) => Plant.fromFirestore(doc))
+                    .toList();
+
+                final visiblePlants = _onlyLiked
+                    ? plants
+                        .where(
+                          (plant) => _likedIds.contains(plant.id),
+                        )
+                        .toList()
+                    : plants;
+
+                if (visiblePlants.isEmpty) {
+                  return const Center(
+                    child: Text(
+                      'Ничего не нашлось',
+                      style: TextStyle(fontSize: 18),
+                    ),
+                  );
+                }
+
+                return ListView.builder(
+                  itemCount: visiblePlants.length,
+                  itemBuilder: (context, index) {
+                    final plant = visiblePlants[index];
+
+                    return PlantCard(
+                      plant: plant,
+                      isLiked: _likedIds.contains(plant.id),
+                      onLikeTap: () {
+                        setState(() {
+                          if (_likedIds.contains(plant.id)) {
+                            _likedIds.remove(plant.id);
+                          } else {
+                            _likedIds.add(plant.id);
+                          }
+                        });
+                      },
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -1,5 +1,6 @@
 
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 enum PlantCategory {
   tropical,
@@ -9,7 +10,7 @@ enum PlantCategory {
 }
 
 class Plant {
-  final int id;
+  final String id;
   final String name;
   final String subtitle;
   final PlantCategory category;
@@ -27,22 +28,28 @@ class Plant {
     this.description,
   });
 
-  // Получаем растение из JSON, который пришёл с сервера.
-  factory Plant.fromJson(Map<String, dynamic> json) {
+  // Получаем растение из документа Firestore.
+  factory Plant.fromFirestore(
+    DocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
+    final data = doc.data()!;
+
     return Plant(
-      id: int.parse(json['id'].toString()),
-      name: json['name'] as String,
-      subtitle: json['subtitle'] as String,
-      category: PlantCategory.values.byName(json['category'] as String),
-      description: json['description'] as String?,
-      icon: json['icon'] as String,
+      id: doc.id,
+      name: data['name'] as String,
+      subtitle: data['subtitle'] as String,
+      category: PlantCategory.values.byName(
+        data['category'] as String,
+      ),
+      description: data['description'] as String?,
+      icon: data['icon'] as String,
       color: Color(
-        int.parse('FF${json['color']}', radix: 16),
+        int.parse('FF${data['color']}', radix: 16),
       ),
     );
   }
 
-  // Подготавливаем растение для отправки на сервер.
+  // Подготавливаем растение для сохранения в Firestore.
   Map<String, dynamic> toJson() {
     return {
       'name': name,
