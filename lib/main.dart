@@ -2,8 +2,11 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'firebase_options.dart';
+import 'bloc/plants_bloc.dart';
+import 'bloc/plants_event.dart';
 import 'ui/auth/auth_screen.dart';
 import 'ui/screens/catalog_screen.dart';
 
@@ -43,7 +46,11 @@ class PlantCatalogApp extends StatelessWidget {
           }
 
           if (snapshot.hasData) {
-            return const CatalogScreen();
+            return BlocProvider(
+              create: (context) => PlantsBloc()
+                ..add(PlantsLoadRequested()),
+              child: const CatalogScreen(),
+            );
           }
 
           return const AuthScreen();

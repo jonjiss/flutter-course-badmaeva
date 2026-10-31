@@ -2,7 +2,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../bloc/plants_bloc.dart';
+import '../../bloc/plants_event.dart';
+import '../../bloc/plants_state.dart';
 import '../../domain/entities/plant.dart';
 import '../widgets/plant_card.dart';
 
@@ -17,9 +21,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
   final Set<String> _likedIds = {};
   final TextEditingController _nameController =
       TextEditingController();
-
-  final CollectionReference<Map<String, dynamic>> _plantsCollection =
-      FirebaseFirestore.instance.collection('plants');
 
   bool _onlyLiked = false;
   bool _isAdding = false;
@@ -58,7 +59,9 @@ class _CatalogScreenState extends State<CatalogScreen> {
         color: Colors.green,
       );
 
-      await _plantsCollection.add(newPlant.toJson());
+      await FirebaseFirestore.instance
+          .collection('plants')
+          .add(newPlant.toJson());
 
       if (!mounted) return;
 
@@ -156,65 +159,78 @@ class _CatalogScreenState extends State<CatalogScreen> {
             ),
           ),
           Expanded(
-            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: _plantsCollection.snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState ==
-                    ConnectionState.waiting) {
+            child: BlocBuilder<PlantsBloc, PlantsState>(
+              builder: (context, state) {
+                if (state is PlantsLoadInProgress) {
                   return const Center(
                     child: CircularProgressIndicator(),
                   );
                 }
 
-                if (snapshot.hasError) {
+                if (state is PlantsLoadFailure) {
                   return Center(
-                    child: Text(
-                      'Ошибка загрузки растений: ${snapshot.error}',
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          state.message,
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 12),
+                        ElevatedButton(
+                          onPressed: () {
+                            context.read<PlantsBloc>().add(
+                                  PlantsLoadRequested(),
+                                );
+                          },
+                          child: const Text('Обновить'),
+                        ),
+                      ],
                     ),
                   );
                 }
 
-                final plants = snapshot.data!.docs
-                    .map((doc) => Plant.fromFirestore(doc))
-                    .toList();
+                if (state is PlantsLoadSuccess) {
+                  final visiblePlants = _onlyLiked
+                      ? state.plants
+                          .where(
+                            (plant) => _likedIds.contains(plant.id),
+                          )
+                          .toList()
+                      : state.plants;
 
-                final visiblePlants = _onlyLiked
-                    ? plants
-                        .where(
-                          (plant) => _likedIds.contains(plant.id),
-                        )
-                        .toList()
-                    : plants;
-
-                if (visiblePlants.isEmpty) {
-                  return const Center(
-                    child: Text(
-                      'Ничего не нашлось',
-                      style: TextStyle(fontSize: 18),
-                    ),
-                  );
-                }
-
-                return ListView.builder(
-                  itemCount: visiblePlants.length,
-                  itemBuilder: (context, index) {
-                    final plant = visiblePlants[index];
-
-                    return PlantCard(
-                      plant: plant,
-                      isLiked: _likedIds.contains(plant.id),
-                      onLikeTap: () {
-                        setState(() {
-                          if (_likedIds.contains(plant.id)) {
-                            _likedIds.remove(plant.id);
-                          } else {
-                            _likedIds.add(plant.id);
-                          }
-                        });
-                      },
+                  if (visiblePlants.isEmpty) {
+                    return const Center(
+                      child: Text(
+                        'Ничего не нашлось',
+                        style: TextStyle(fontSize: 18),
+                      ),
                     );
-                  },
-                );
+                  }
+
+                  return ListView.builder(
+                    itemCount: visiblePlants.length,
+                    itemBuilder: (context, index) {
+                      final plant = visiblePlants[index];
+
+                      return PlantCard(
+                        plant: plant,
+                        isLiked: _likedIds.contains(plant.id),
+                        onLikeTap: () {
+                          setState(() {
+                            if (_likedIds.contains(plant.id)) {
+                              _likedIds.remove(plant.id);
+                            } else {
+                              _likedIds.add(plant.id);
+                            }
+                          });
+                        },
+                      );
+                    },
+                  );
+                }
+
+                return const SizedBox.shrink();
               },
             ),
           ),
